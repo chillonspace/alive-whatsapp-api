@@ -82,13 +82,72 @@ Example response:
 
 ### POST /send-message
 
+This endpoint supports `text`, `image`, and `template` messages through a single request format.
+
+Base request shape:
+
+```json
+{
+  "api_key": "my_client_api_key",
+  "phone": "60123456789",
+  "message_type": "text",
+  "payload": {}
+}
+```
+
+Text message:
+
 ```bash
 curl -X POST http://localhost:3000/send-message \
   -H "Content-Type: application/json" \
   -d '{
     "api_key": "my_client_api_key",
     "phone": "60123456789",
-    "message": "Hi, your booking is confirmed"
+    "message_type": "text",
+    "payload": {
+      "text": "Hi, your booking is confirmed"
+    }
+  }'
+```
+
+Image message:
+
+```bash
+curl -X POST http://localhost:3000/send-message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "api_key": "my_client_api_key",
+    "phone": "60123456789",
+    "message_type": "image",
+    "payload": {
+      "image_url": "https://example.com/image.jpg",
+      "caption": "Your booking receipt"
+    }
+  }'
+```
+
+Template message:
+
+```bash
+curl -X POST http://localhost:3000/send-message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "api_key": "my_client_api_key",
+    "phone": "60123456789",
+    "message_type": "template",
+    "payload": {
+      "template_name": "christmas_promo_23",
+      "language": "en",
+      "mapping": [
+        {
+          "schema_property_name": "1",
+          "schema_property_value": "John"
+        }
+      ],
+      "header_mapping": [],
+      "button_mapping": [],
+      "image_url": "https://example.com/banner.jpg"
+    }
   }'
 ```
 
@@ -115,5 +174,12 @@ Error response:
 - `api_key` must match `CLIENT_API_KEY` in your `.env`
 - if `CLIENT_API_KEY` is missing, the API will return a server configuration error instead of allowing requests
 - `phone` is normalized by removing spaces, dashes, and `+`
-- messages are sent to ChakraHQ using your configured plugin and phone number ID
+- `message_type` must be `text`, `image`, or `template`
+- text messages require `payload.text`
+- image messages require `payload.image_url`, and may include `payload.caption`
+- template messages require `payload.template_name`
+- template messages may include `payload.language`, `payload.mapping`, `payload.header_mapping`, `payload.button_mapping`, `payload.image_url`, `payload.video_url`, `payload.document_url`, `payload.filename`, and `payload.location`
+- template mapping items must include `schema_property_name` and `schema_property_value`
+- text and image messages are sent through the standard ChakraHQ messages API
+- template messages are sent through the ChakraHQ `send-template-message` API
 - live sending still depends on your Chakra / WhatsApp number onboarding being ready
