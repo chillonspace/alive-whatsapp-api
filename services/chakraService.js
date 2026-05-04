@@ -80,17 +80,78 @@ function buildGenericMessageUrl(pluginId, apiVersion, phoneNumberId) {
   return `https://api.chakrahq.com/v1/ext/plugin/whatsapp/${pluginId}/api/${apiVersion}/${phoneNumberId}/messages`;
 }
 
+function isConfiguredValue(value) {
+  return typeof value === 'string' && value.trim() !== '' && !value.trim().startsWith('replace_with_');
+}
+
+function firstString(...values) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return '';
+}
+
+function getChakraResponseSummary(data) {
+  if (!data) {
+    return {};
+  }
+
+  if (typeof data === 'string') {
+    return { raw: data.slice(0, 500) };
+  }
+
+  if (typeof data !== 'object' || Array.isArray(data)) {
+    return { raw: data };
+  }
+
+  const metaError = data.error && typeof data.error === 'object' ? data.error : {};
+
+  return {
+    message: data.message || metaError.message || '',
+    error: typeof data.error === 'string' ? data.error : '',
+    errorDetails: metaError.error_data?.details || '',
+    errorCode: metaError.code || data.code || '',
+    errorType: metaError.type || data.type || '',
+    errors: Array.isArray(data._errors) ? data._errors.slice(0, 3) : []
+  };
+}
+
+function getUpstreamErrorMessage(err) {
+  const data = err.response?.data;
+
+  if (typeof data === 'string' && data.trim()) {
+    return data.trim();
+  }
+
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return '';
+  }
+
+  const metaError = data.error && typeof data.error === 'object' ? data.error : {};
+
+  return firstString(
+    data.message,
+    metaError.error_data?.details,
+    metaError.message,
+    typeof data.error === 'string' ? data.error : '',
+    Array.isArray(data._errors) ? data._errors[0] : ''
+  );
+}
+
 function validateConfig(messageType, config) {
   const { accessToken, pluginId, apiVersion, phoneNumberId } = config;
 
-  if (!accessToken || !pluginId || !phoneNumberId) {
-    const error = new Error('Server configuration is incomplete');
+  if (!isConfiguredValue(accessToken) || !isConfiguredValue(pluginId) || !isConfiguredValue(phoneNumberId)) {
+    const error = new Error('Server configuration is incomplete: Chakra credentials or phone number ID are not configured');
     error.statusCode = 500;
     throw error;
   }
 
-  if (messageType !== 'template' && !apiVersion) {
-    const error = new Error('Server configuration is incomplete');
+  if (messageType !== 'template' && !isConfiguredValue(apiVersion)) {
+    const error = new Error('Server configuration is incomplete: Chakra API version is not configured');
     error.statusCode = 500;
     throw error;
   }
@@ -103,34 +164,68 @@ async function sendTemplateMessage(phone, payload, pluginId, phoneNumberId, acce
   await axios.post(url, chakraPayload, getRequestConfig(accessToken));
 }
 
-async function sendWhatsAppMessage(phone, messageType, payload) {
+async function sendWhatsAppMessage(phone, messageType, payload, runId = 'unknown') {
   const accessToken = process.env.CHAKRA_ACCESS_TOKEN;
   const pluginId = process.env.CHAKRA_PLUGIN_ID;
   const apiVersion = process.env.CHAKRA_WA_API_VERSION;
   const phoneNumberId = process.env.CHAKRA_PHONE_NUMBER_ID;
 
+  console.info('Preparing Chakra message request', {
+    runId,
+    messageType,
+    hasAccessToken: !!accessToken,
+    hasPluginId: !!pluginId,
+    hasApiVersion: !!apiVersion,
+    hasPhoneNumberId: !!phoneNumberId,
+    apiVersion: apiVersion || ''
+  });
+
   validateConfig(messageType, { accessToken, pluginId, apiVersion, phoneNumberId });
 
   try {
     if (messageType === 'template') {
+      console.info('Posting Chakra template message', {
+        runId,
+        phoneLast4: phone ? String(phone).slice(-4) : '',
+        templateName: payload.template_name,
+        mappingCount: payload.mapping.length,
+        headerMappingCount: payload.header_mapping.length,
+        buttonMappingCount: payload.button_mapping.length
+      });
+
       await sendTemplateMessage(phone, payload, pluginId, phoneNumberId, accessToken);
     } else {
       const url = buildGenericMessageUrl(pluginId, apiVersion, phoneNumberId);
       const chakraPayload = buildGenericMessagePayload(phone, messageType, payload);
 
+      console.info('Posting Chakra session message', {
+        runId,
+        messageType,
+        phoneLast4: phone ? String(phone).slice(-4) : '',
+        payloadShape: {
+          topLevelKeys: Object.keys(chakraPayload),
+          type: chakraPayload.type,
+          hasTextBody: !!chakraPayload.text?.body,
+          textLength: typeof chakraPayload.text?.body === 'string' ? chakraPayload.text.body.length : 0,
+          hasImageLink: !!chakraPayload.image?.link
+        }
+      });
+
       await axios.post(url, chakraPayload, getRequestConfig(accessToken));
     }
   } catch (err) {
-    const upstreamError =
-      err.response?.data?.message ||
-      err.response?.data?.error?.message ||
-      err.response?.data?.error ||
-      'Failed to send message through ChakraHQ';
+    console.error('Chakra request failed', {
+      runId,
+      status: err.response?.status || null,
+      code: err.code || '',
+      message: err.message || '',
+      response: getChakraResponseSummary(err.response?.data)
+    });
+
+    const upstreamError = getUpstreamErrorMessage(err);
 
     const error = new Error(
-      typeof upstreamError === 'string'
-        ? upstreamError
-        : 'Failed to send message through ChakraHQ'
+      upstreamError || 'Failed to send message through ChakraHQ'
     );
 
     error.statusCode = err.response?.status || 500;

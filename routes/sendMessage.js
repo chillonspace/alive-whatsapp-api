@@ -173,6 +173,19 @@ router.post('/send-message', async (req, res) => {
   const providedApiKey = normalizeString(api_key);
   const normalizedPhone = phone ? normalizePhone(phone) : '';
   const messageType = normalizeString(message_type).toLowerCase();
+  const requestId = `sendmsg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+  console.info('Incoming send-message request', {
+    requestId,
+    hasApiKey: !!providedApiKey,
+    apiKeyMatches: !!configuredApiKey && providedApiKey === configuredApiKey,
+    phoneLast4: normalizedPhone ? normalizedPhone.slice(-4) : '',
+    messageType,
+    payloadKeys:
+      payload && typeof payload === 'object' && !Array.isArray(payload)
+        ? Object.keys(payload)
+        : []
+  });
 
   if (!configuredApiKey) {
     return res.status(500).json({
@@ -212,7 +225,7 @@ router.post('/send-message', async (req, res) => {
   }
 
   try {
-    await sendWhatsAppMessage(normalizedPhone, messageType, normalizedPayload.value);
+    await sendWhatsAppMessage(normalizedPhone, messageType, normalizedPayload.value, requestId);
 
     return res.status(200).json({
       success: true,

@@ -84,6 +84,8 @@ Example response:
 
 This endpoint supports `text`, `image`, and `template` messages through a single request format.
 
+Use `text` and `image` only for WhatsApp session messages, where the customer has messaged the business number within the active 24-hour window. For outbound notifications like booking confirmations, use an approved WhatsApp template and send `message_type: "template"`.
+
 Base request shape:
 
 ```json
@@ -151,6 +153,52 @@ curl -X POST http://localhost:3000/send-message \
   }'
 ```
 
+Booking confirmation template example:
+
+```bash
+curl -X POST http://localhost:3000/send-message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "api_key": "my_client_api_key",
+    "phone": "60123456789",
+    "message_type": "template",
+    "payload": {
+      "template_name": "course_booking_confirmed",
+      "language": "en",
+      "mapping": [
+        {
+          "schema_property_name": "1",
+          "schema_property_value": "Customer User 1"
+        },
+        {
+          "schema_property_name": "2",
+          "schema_property_value": "Art Therapy Workshop"
+        },
+        {
+          "schema_property_name": "3",
+          "schema_property_value": "2026-04-29"
+        },
+        {
+          "schema_property_name": "4",
+          "schema_property_value": "virtual"
+        },
+        {
+          "schema_property_name": "5",
+          "schema_property_value": "RM95.40"
+        },
+        {
+          "schema_property_name": "6",
+          "schema_property_value": "fully_paid"
+        },
+        {
+          "schema_property_name": "7",
+          "schema_property_value": "BO-Dl1It0"
+        }
+      ]
+    }
+  }'
+```
+
 Success response:
 
 ```json
@@ -180,6 +228,6 @@ Error response:
 - template messages require `payload.template_name`
 - template messages may include `payload.language`, `payload.mapping`, `payload.header_mapping`, `payload.button_mapping`, `payload.image_url`, `payload.video_url`, `payload.document_url`, `payload.filename`, and `payload.location`
 - template mapping items must include `schema_property_name` and `schema_property_value`
-- text and image messages are sent through the standard ChakraHQ messages API
+- text and image messages are sent through the standard ChakraHQ messages API and require an active WhatsApp customer service window
 - template messages are sent through the ChakraHQ `send-template-message` API
 - live sending still depends on your Chakra / WhatsApp number onboarding being ready
