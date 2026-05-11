@@ -2,6 +2,8 @@ require('dotenv').config();
 
 const express = require('express');
 const sendMessageRouter = require('./routes/sendMessage');
+const templatesRouter = require('./src/routes/templates');
+const sendTemplateRouter = require('./src/routes/sendTemplate');
 
 const app = express();
 
@@ -10,11 +12,14 @@ app.use(express.json());
 app.get('/health', (req, res) => {
   res.status(200).json({
     success: true,
-    message: 'Alive WhatsApp API is running'
+    service: 'Alive WhatsApp Template API',
+    status: 'ok'
   });
 });
 
 app.use('/', sendMessageRouter);
+app.use('/', templatesRouter);
+app.use('/', sendTemplateRouter);
 
 app.use((req, res) => {
   res.status(404).json({
