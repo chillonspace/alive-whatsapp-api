@@ -6,7 +6,10 @@ const { createTemplate, listTemplates } = require('../services/chakraTemplateSer
 
 const router = express.Router();
 
-const SUPPORTED_CATEGORIES = new Set(['MARKETING', 'UTILITY', 'AUTHENTICATION']);
+const SUPPORTED_CATEGORIES = new Set(['MARKETING', 'UTILITY']);
+const SUPPORTED_LANGUAGES = new Set(['en', 'zh_CN']);
+const SUPPORTED_HEADER_TYPES = new Set(['TEXT']);
+const HEADER_TEXT_MAX_LENGTH = 60;
 const TEMPLATE_NAME_PATTERN = /^[a-z0-9_]+$/;
 const DEFAULT_CHANNEL = 'test';
 const TABLE = 'whatsapp_templates';
@@ -43,6 +46,40 @@ function validateCreateBody(body) {
   const language = trimString(body.language);
   if (!language) {
     return 'language is required';
+  }
+  if (!SUPPORTED_LANGUAGES.has(language)) {
+    return `language must be one of: ${Array.from(SUPPORTED_LANGUAGES).join(', ')}`;
+  }
+
+  if (body.header !== undefined && body.header !== null) {
+    if (typeof body.header !== 'object' || Array.isArray(body.header)) {
+      return 'header must be an object like { type: "TEXT", text: "..." }';
+    }
+    const headerType = trimString(body.header.type).toUpperCase();
+    if (!headerType) {
+      return 'header.type is required when header is provided';
+    }
+    if (!SUPPORTED_HEADER_TYPES.has(headerType)) {
+      return 'header.type must be TEXT (media headers are not supported in this version)';
+    }
+    const headerText = typeof body.header.text === 'string' ? body.header.text : '';
+    if (!headerText.trim()) {
+      return 'header.text is required and must be a non-empty string';
+    }
+    if (headerText.length > HEADER_TEXT_MAX_LENGTH) {
+      return `header.text must be at most ${HEADER_TEXT_MAX_LENGTH} characters (Meta limit)`;
+    }
+    if (/{{\s*[a-zA-Z_][a-zA-Z0-9_]*\s*}}/.test(headerText)) {
+      return 'header variables are not supported in this version; please use a plain text header';
+    }
+  }
+
+  if (body.footer !== undefined && body.footer !== null) {
+    return 'footer is not supported in this version';
+  }
+
+  if (body.buttons !== undefined && body.buttons !== null) {
+    return 'buttons are not supported in this version';
   }
 
   const text = typeof body.body === 'string' ? body.body : '';
@@ -86,6 +123,9 @@ router.post('/templates', requireApiKey, async (req, res) => {
   const bodyOriginal = req.body.body;
   const variables = req.body.variables;
   const examples = req.body.examples;
+  const header = req.body.header
+    ? { type: 'TEXT', text: trimString(req.body.header.text) }
+    : null;
 
   let bodyMeta;
   let variablesOrder;
@@ -122,7 +162,8 @@ router.post('/templates', requireApiKey, async (req, res) => {
       language,
       bodyMeta,
       examples,
-      variablesOrder
+      variablesOrder,
+      header
     });
   } catch (err) {
     return res.status(err.statusCode || 500).json({
@@ -144,6 +185,7 @@ router.post('/templates', requireApiKey, async (req, res) => {
     status,
     body_original: bodyOriginal,
     body_meta: bodyMeta,
+    header,
     variables_order: variablesOrder,
     mapping,
     examples,
@@ -192,6 +234,30 @@ function extractBodyComponent(components) {
   return components.find(
     (component) => component && typeof component === 'object' && component.type === 'BODY'
   );
+}
+
+function extractHeaderComponent(components) {
+  if (!Array.isArray(components)) {
+    return null;
+  }
+
+  const headerComponent = components.find(
+    (component) => component && typeof component === 'object' && component.type === 'HEADER'
+  );
+
+  if (!headerComponent) {
+    return null;
+  }
+
+  const format = typeof headerComponent.format === 'string'
+    ? headerComponent.format.toUpperCase()
+    : null;
+
+  if (format === 'TEXT') {
+    return { type: 'TEXT', text: headerComponent.text || '' };
+  }
+
+  return { type: format || 'UNKNOWN' };
 }
 
 router.get('/templates', requireApiKey, async (req, res) => {
@@ -246,6 +312,7 @@ router.get('/templates', requireApiKey, async (req, res) => {
     const language = tpl.language || null;
     const bodyComponent = extractBodyComponent(tpl.components);
     const bodyMeta = bodyComponent?.text || null;
+    const headerFromChakra = extractHeaderComponent(tpl.components);
 
     const supabaseRow = templateName && language
       ? supabaseIndex.get(`${templateName}::${language}`)
@@ -256,6 +323,7 @@ router.get('/templates', requireApiKey, async (req, res) => {
       category: tpl.category || null,
       language,
       status: tpl.status || null,
+      header: headerFromChakra || supabaseRow?.header || null,
       body_meta: bodyMeta,
       body_original: supabaseRow?.body_original || null,
       variables_order: supabaseRow?.variables_order || null,

@@ -161,7 +161,24 @@ async function sendTemplateMessage(phone, payload, pluginId, phoneNumberId, acce
   const url = buildTemplateUrl(pluginId, phone);
   const chakraPayload = buildTemplatePayload(phoneNumberId, payload);
 
-  await axios.post(url, chakraPayload, getRequestConfig(accessToken));
+  const response = await axios.post(url, chakraPayload, getRequestConfig(accessToken));
+  const data = response.data || {};
+
+  console.info('Chakra template send response', {
+    status: response.status,
+    hasData: !!data._data,
+    whatsappMessageId: data._data?.whatsappMessageId || data._data?.externalId || null,
+    deliveryStatus: data._data?.deliveryStatus || null,
+    errors: Array.isArray(data._errors) ? data._errors : null
+  });
+
+  if (Array.isArray(data._errors) && data._errors.length > 0) {
+    const error = new Error(data._errors.join('; ') || 'ChakraHQ returned errors in send response');
+    error.statusCode = 502;
+    throw error;
+  }
+
+  return data;
 }
 
 async function sendWhatsAppMessage(phone, messageType, payload, runId = 'unknown') {

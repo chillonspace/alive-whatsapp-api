@@ -98,7 +98,7 @@ function summarizeChakraError(err) {
   };
 }
 
-async function createTemplate({ name, category, language, bodyMeta, examples, variablesOrder, runId = 'unknown' }) {
+async function createTemplate({ name, category, language, bodyMeta, examples, variablesOrder, header, runId = 'unknown' }) {
   const { baseUrl, accessToken, apiVersion, wabaId } = getChakraEnv();
 
   const bodyComponent = {
@@ -112,11 +112,23 @@ async function createTemplate({ name, category, language, bodyMeta, examples, va
     };
   }
 
+  const components = [];
+
+  if (header && header.type === 'TEXT' && typeof header.text === 'string' && header.text.trim()) {
+    components.push({
+      type: 'HEADER',
+      format: 'TEXT',
+      text: header.text
+    });
+  }
+
+  components.push(bodyComponent);
+
   const requestBody = {
     name,
     category,
     language,
-    components: [bodyComponent]
+    components
   };
 
   const url = buildMessageTemplatesUrl(baseUrl, apiVersion, wabaId);
@@ -126,6 +138,7 @@ async function createTemplate({ name, category, language, bodyMeta, examples, va
     name,
     category,
     language,
+    hasHeader: !!(header && header.type === 'TEXT'),
     hasExamples: !!bodyComponent.example
   });
 

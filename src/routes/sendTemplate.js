@@ -1,7 +1,7 @@
 const express = require('express');
 const { requireApiKey } = require('../middleware/auth');
 const { getSupabaseClient } = require('../config/supabase');
-const { buildPositionalMapping } = require('../services/templateMappingService');
+const { buildMappingFromStored } = require('../services/templateMappingService');
 const { sendWhatsAppMessage } = require('../../services/chakraService');
 
 const router = express.Router();
@@ -61,7 +61,7 @@ router.post('/send-template', requireApiKey, async (req, res) => {
 
   const { data: template, error: lookupError } = await supabase
     .from(TABLE)
-    .select('template_name, language, status, variables_order')
+    .select('template_name, language, status, variables_order, mapping')
     .eq('channel', DEFAULT_CHANNEL)
     .eq('template_name', templateName)
     .eq('language', language)
@@ -85,11 +85,18 @@ router.post('/send-template', requireApiKey, async (req, res) => {
     });
   }
 
-  const variablesOrder = Array.isArray(template.variables_order) ? template.variables_order : [];
+  const storedMapping = template.mapping;
+
+  if (!storedMapping || typeof storedMapping !== 'object' || Array.isArray(storedMapping)) {
+    return res.status(500).json({
+      success: false,
+      error: `Template "${templateName}" is missing variable mapping metadata in Supabase`
+    });
+  }
 
   let mapping;
   try {
-    mapping = buildPositionalMapping(variablesOrder, variables);
+    mapping = buildMappingFromStored(storedMapping, variables);
   } catch (err) {
     return res.status(err.statusCode || 400).json({
       success: false,

@@ -12,6 +12,7 @@ create table if not exists whatsapp_templates (
 
   body_original text,
   body_meta text,
+  header jsonb,
 
   variables_order jsonb,
   mapping jsonb,

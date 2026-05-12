@@ -105,8 +105,41 @@ function buildPositionalMapping(variablesOrder, variables) {
   });
 }
 
+function buildMappingFromStored(storedMapping, variables) {
+  if (!storedMapping || typeof storedMapping !== 'object' || Array.isArray(storedMapping)) {
+    throw Object.assign(
+      new Error('Template mapping is missing or invalid'),
+      { statusCode: 500 }
+    );
+  }
+
+  if (!variables || typeof variables !== 'object' || Array.isArray(variables)) {
+    throw Object.assign(
+      new Error('variables must be an object with a key for each template variable'),
+      { statusCode: 400 }
+    );
+  }
+
+  return Object.entries(storedMapping).map(([schemaKey, uiVariableName]) => {
+    const value = variables[uiVariableName];
+
+    if (value === undefined || value === null) {
+      throw Object.assign(
+        new Error(`variables.${uiVariableName} is required for this template`),
+        { statusCode: 400 }
+      );
+    }
+
+    return {
+      schema_property_name: String(schemaKey),
+      schema_property_value: String(value)
+    };
+  });
+}
+
 module.exports = {
   convertNamedPlaceholdersToPositional,
   buildExampleBodyText,
-  buildPositionalMapping
+  buildPositionalMapping,
+  buildMappingFromStored
 };
