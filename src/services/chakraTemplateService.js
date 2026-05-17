@@ -100,7 +100,47 @@ function summarizeChakraError(err) {
 
 async function createTemplate({ name, category, language, bodyMeta, examples, variablesOrder, header, runId = 'unknown' }) {
   const { baseUrl, accessToken, apiVersion, wabaId } = getChakraEnv();
+  const requestBody = buildCreateTemplateRequest({
+    name,
+    category,
+    language,
+    bodyMeta,
+    examples,
+    variablesOrder,
+    header
+  });
+  const bodyComponent = requestBody.components.find((component) => component.type === 'BODY');
+  const url = buildMessageTemplatesUrl(baseUrl, apiVersion, wabaId);
 
+  console.info('Posting Chakra create-template request', {
+    runId,
+    name,
+    category,
+    language,
+    headerType: header?.type || null,
+    hasHeader: !!header,
+    hasExamples: !!bodyComponent?.example
+  });
+
+  try {
+    const response = await axios.post(url, requestBody, getRequestConfig(accessToken));
+    return { requestBody, response: response.data };
+  } catch (err) {
+    console.error('Chakra create-template request failed', {
+      runId,
+      status: err.response?.status || null,
+      summary: summarizeChakraError(err)
+    });
+
+    const upstreamMessage = getUpstreamErrorMessage(err);
+    const error = new Error(upstreamMessage || 'Failed to create template via ChakraHQ');
+    error.statusCode = err.response?.status || 500;
+    error.upstream = err.response?.data || null;
+    throw error;
+  }
+}
+
+function buildCreateTemplateRequest({ name, category, language, bodyMeta, examples, variablesOrder, header }) {
   const bodyComponent = {
     type: 'BODY',
     text: bodyMeta
@@ -122,42 +162,24 @@ async function createTemplate({ name, category, language, bodyMeta, examples, va
     });
   }
 
+  if (header && header.type === 'IMAGE' && typeof header.example_url === 'string' && header.example_url.trim()) {
+    components.push({
+      type: 'HEADER',
+      format: 'IMAGE',
+      example: {
+        header_handle: [header.example_url]
+      }
+    });
+  }
+
   components.push(bodyComponent);
 
-  const requestBody = {
+  return {
     name,
     category,
     language,
     components
   };
-
-  const url = buildMessageTemplatesUrl(baseUrl, apiVersion, wabaId);
-
-  console.info('Posting Chakra create-template request', {
-    runId,
-    name,
-    category,
-    language,
-    hasHeader: !!(header && header.type === 'TEXT'),
-    hasExamples: !!bodyComponent.example
-  });
-
-  try {
-    const response = await axios.post(url, requestBody, getRequestConfig(accessToken));
-    return { requestBody, response: response.data };
-  } catch (err) {
-    console.error('Chakra create-template request failed', {
-      runId,
-      status: err.response?.status || null,
-      summary: summarizeChakraError(err)
-    });
-
-    const upstreamMessage = getUpstreamErrorMessage(err);
-    const error = new Error(upstreamMessage || 'Failed to create template via ChakraHQ');
-    error.statusCode = err.response?.status || 500;
-    error.upstream = err.response?.data || null;
-    throw error;
-  }
 }
 
 async function listTemplates({ runId = 'unknown' } = {}) {
@@ -204,5 +226,6 @@ async function listTemplates({ runId = 'unknown' } = {}) {
 
 module.exports = {
   createTemplate,
-  listTemplates
+  listTemplates,
+  buildCreateTemplateRequest
 };
