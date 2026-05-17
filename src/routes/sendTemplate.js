@@ -21,6 +21,46 @@ function trimString(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function isPublicHttpsUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !!url.hostname;
+  } catch (_err) {
+    return false;
+  }
+}
+
+function isImageHeader(header) {
+  return !!header && typeof header === 'object' && !Array.isArray(header) && header.type === 'IMAGE';
+}
+
+function validateTemplateImageUrl(header, imageUrl) {
+  if (!isImageHeader(header)) {
+    return null;
+  }
+
+  if (!imageUrl) {
+    return 'image_url is required for templates with IMAGE header';
+  }
+
+  if (!isPublicHttpsUrl(imageUrl)) {
+    return 'image_url must be a public https URL';
+  }
+
+  return null;
+}
+
+function buildSendTemplatePayload({ templateName, language, mapping, header, imageUrl }) {
+  return {
+    template_name: templateName,
+    language,
+    mapping,
+    header_mapping: [],
+    button_mapping: [],
+    ...(isImageHeader(header) ? { image_url: imageUrl } : {})
+  };
+}
+
 router.post('/send-template', requireApiKey, async (req, res) => {
   const runId = newRunId();
   const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
@@ -28,6 +68,7 @@ router.post('/send-template', requireApiKey, async (req, res) => {
   const phone = normalizePhone(body.phone);
   const templateName = trimString(body.template_name);
   const language = trimString(body.language);
+  const imageUrl = trimString(body.image_url);
   const variables = body.variables;
 
   if (!phone) {
@@ -61,7 +102,7 @@ router.post('/send-template', requireApiKey, async (req, res) => {
 
   const { data: template, error: lookupError } = await supabase
     .from(TABLE)
-    .select('template_name, language, status, variables_order, mapping')
+    .select('template_name, language, status, header, variables_order, mapping')
     .eq('channel', DEFAULT_CHANNEL)
     .eq('template_name', templateName)
     .eq('language', language)
@@ -104,13 +145,21 @@ router.post('/send-template', requireApiKey, async (req, res) => {
     });
   }
 
-  const payload = {
-    template_name: templateName,
+  const imageUrlError = validateTemplateImageUrl(template.header, imageUrl);
+  if (imageUrlError) {
+    return res.status(400).json({
+      success: false,
+      error: imageUrlError
+    });
+  }
+
+  const payload = buildSendTemplatePayload({
+    templateName,
     language,
     mapping,
-    header_mapping: [],
-    button_mapping: []
-  };
+    header: template.header,
+    imageUrl
+  });
 
   console.info('Forwarding send-template to ChakraHQ', {
     runId,
@@ -138,3 +187,6 @@ router.post('/send-template', requireApiKey, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.validateTemplateImageUrl = validateTemplateImageUrl;
+module.exports.buildSendTemplatePayload = buildSendTemplatePayload;
+module.exports.isPublicHttpsUrl = isPublicHttpsUrl;
