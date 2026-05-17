@@ -26,7 +26,7 @@ function buildGenericMessagePayload(phone, messageType, payload) {
       type: 'image',
       image: {
         link: payload.image_url,
-        ...(payload.caption ? { caption: payload.caption } : {})
+        ...(payload.caption ? { caption } : {})
       }
     };
   }
@@ -251,5 +251,6 @@ async function sendWhatsAppMessage(phone, messageType, payload, runId = 'unknown
 }
 
 module.exports = {
-  sendWhatsAppMessage
+  sendWhatsAppMessage,
+  buildTemplatePayload
 };
