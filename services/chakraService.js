@@ -26,7 +26,7 @@ function buildGenericMessagePayload(phone, messageType, payload) {
       type: 'image',
       image: {
         link: payload.image_url,
-        ...(payload.caption ? { caption } : {})
+        ...(payload.caption ? { caption: payload.caption } : {})
       }
     };
   }
