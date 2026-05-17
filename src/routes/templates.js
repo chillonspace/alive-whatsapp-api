@@ -8,7 +8,7 @@ const router = express.Router();
 
 const SUPPORTED_CATEGORIES = new Set(['MARKETING', 'UTILITY']);
 const SUPPORTED_LANGUAGES = new Set(['en', 'zh_CN']);
-const SUPPORTED_HEADER_TYPES = new Set(['TEXT']);
+const SUPPORTED_HEADER_TYPES = new Set(['TEXT', 'IMAGE']);
 const HEADER_TEXT_MAX_LENGTH = 60;
 const TEMPLATE_NAME_PATTERN = /^[a-z0-9_]+$/;
 const DEFAULT_CHANNEL = 'test';
@@ -20,6 +20,80 @@ function newRunId(prefix) {
 
 function trimString(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function isPublicHttpsUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !!url.hostname;
+  } catch (_err) {
+    return false;
+  }
+}
+
+function validateHeader(header) {
+  if (header === undefined || header === null) {
+    return null;
+  }
+
+  if (typeof header !== 'object' || Array.isArray(header)) {
+    return 'header must be an object like { type: "TEXT", text: "..." } or { type: "IMAGE", example_url: "https://..." }';
+  }
+
+  const headerType = trimString(header.type).toUpperCase();
+  if (!headerType) {
+    return 'header.type is required when header is provided';
+  }
+  if (!SUPPORTED_HEADER_TYPES.has(headerType)) {
+    return `header.type must be one of: ${Array.from(SUPPORTED_HEADER_TYPES).join(', ')}`;
+  }
+
+  if (headerType === 'TEXT') {
+    const headerText = typeof header.text === 'string' ? header.text : '';
+    if (!headerText.trim()) {
+      return 'header.text is required and must be a non-empty string';
+    }
+    if (headerText.length > HEADER_TEXT_MAX_LENGTH) {
+      return `header.text must be at most ${HEADER_TEXT_MAX_LENGTH} characters (Meta limit)`;
+    }
+    if (/{{\s*[a-zA-Z_][a-zA-Z0-9_]*\s*}}/.test(headerText)) {
+      return 'header variables are not supported in this version; please use a plain text header';
+    }
+  }
+
+  if (headerType === 'IMAGE') {
+    if (trimString(header.text)) {
+      return 'header.text is not supported when header.type is IMAGE';
+    }
+
+    const exampleUrl = trimString(header.example_url);
+    if (!exampleUrl) {
+      return 'header.example_url is required when header.type is IMAGE';
+    }
+    if (!isPublicHttpsUrl(exampleUrl)) {
+      return 'header.example_url must be a public https URL';
+    }
+  }
+
+  return null;
+}
+
+function normalizeHeader(header) {
+  if (header === undefined || header === null) {
+    return null;
+  }
+
+  const headerType = trimString(header.type).toUpperCase();
+
+  if (headerType === 'TEXT') {
+    return { type: 'TEXT', text: trimString(header.text) };
+  }
+
+  if (headerType === 'IMAGE') {
+    return { type: 'IMAGE', example_url: trimString(header.example_url) };
+  }
+
+  return null;
 }
 
 function validateCreateBody(body) {
@@ -51,27 +125,9 @@ function validateCreateBody(body) {
     return `language must be one of: ${Array.from(SUPPORTED_LANGUAGES).join(', ')}`;
   }
 
-  if (body.header !== undefined && body.header !== null) {
-    if (typeof body.header !== 'object' || Array.isArray(body.header)) {
-      return 'header must be an object like { type: "TEXT", text: "..." }';
-    }
-    const headerType = trimString(body.header.type).toUpperCase();
-    if (!headerType) {
-      return 'header.type is required when header is provided';
-    }
-    if (!SUPPORTED_HEADER_TYPES.has(headerType)) {
-      return 'header.type must be TEXT (media headers are not supported in this version)';
-    }
-    const headerText = typeof body.header.text === 'string' ? body.header.text : '';
-    if (!headerText.trim()) {
-      return 'header.text is required and must be a non-empty string';
-    }
-    if (headerText.length > HEADER_TEXT_MAX_LENGTH) {
-      return `header.text must be at most ${HEADER_TEXT_MAX_LENGTH} characters (Meta limit)`;
-    }
-    if (/{{\s*[a-zA-Z_][a-zA-Z0-9_]*\s*}}/.test(headerText)) {
-      return 'header variables are not supported in this version; please use a plain text header';
-    }
+  const headerError = validateHeader(body.header);
+  if (headerError) {
+    return headerError;
   }
 
   if (body.footer !== undefined && body.footer !== null) {
@@ -123,9 +179,7 @@ router.post('/templates', requireApiKey, async (req, res) => {
   const bodyOriginal = req.body.body;
   const variables = req.body.variables;
   const examples = req.body.examples;
-  const header = req.body.header
-    ? { type: 'TEXT', text: trimString(req.body.header.text) }
-    : null;
+  const header = normalizeHeader(req.body.header);
 
   let bodyMeta;
   let variablesOrder;
@@ -323,7 +377,7 @@ router.get('/templates', requireApiKey, async (req, res) => {
       category: tpl.category || null,
       language,
       status: tpl.status || null,
-      header: headerFromChakra || supabaseRow?.header || null,
+      header: supabaseRow?.header || headerFromChakra || null,
       body_meta: bodyMeta,
       body_original: supabaseRow?.body_original || null,
       variables_order: supabaseRow?.variables_order || null,
@@ -341,3 +395,6 @@ router.get('/templates', requireApiKey, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.validateCreateBody = validateCreateBody;
+module.exports.normalizeHeader = normalizeHeader;
+module.exports.isPublicHttpsUrl = isPublicHttpsUrl;
