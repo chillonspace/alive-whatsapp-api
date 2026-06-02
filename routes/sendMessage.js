@@ -1,5 +1,12 @@
 const express = require('express');
 const { sendWhatsAppMessage } = require('../services/chakraService');
+const { getSupabaseClient } = require('../src/config/supabase');
+const {
+  checkUsageLimit,
+  getUsageConfig,
+  hashValue,
+  logApiUsage
+} = require('../src/services/apiUsageService');
 
 const router = express.Router();
 const SUPPORTED_MESSAGE_TYPES = new Set(['text', 'image', 'template']);
@@ -10,6 +17,12 @@ function normalizePhone(phone) {
 
 function normalizeString(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function getPayloadTemplateName(payload) {
+  return payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? normalizeString(payload.template_name)
+    : '';
 }
 
 function normalizeMappingArray(fieldName, items) {
@@ -170,10 +183,32 @@ function normalizePayload(messageType, payload) {
 router.post('/send-message', async (req, res) => {
   const { api_key, phone, message_type, payload } = req.body || {};
   const configuredApiKey = process.env.CLIENT_API_KEY;
+  const apiKeyLabel = process.env.CLIENT_API_LABEL || 'client_main';
+  const usageConfig = getUsageConfig();
   const providedApiKey = normalizeString(api_key);
   const normalizedPhone = phone ? normalizePhone(phone) : '';
   const messageType = normalizeString(message_type).toLowerCase();
   const requestId = `sendmsg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const templateName = getPayloadTemplateName(payload);
+  const requestHash = hashValue({
+    phone: normalizedPhone,
+    message_type: messageType,
+    payload
+  });
+  const baseLogEntry = {
+    requestId,
+    endpoint: 'send-message',
+    apiKeyLabel,
+    phone: normalizedPhone,
+    templateName,
+    language: normalizeString(payload?.language),
+    requestHash,
+    imageUrlPresent: !!payload?.image_url,
+    variablesKeys: payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? Object.keys(payload).sort()
+      : [],
+    metadata: { message_type: messageType }
+  };
 
   console.info('Incoming send-message request', {
     requestId,
@@ -224,14 +259,101 @@ router.post('/send-message', async (req, res) => {
     });
   }
 
+  let supabase;
+  try {
+    supabase = getSupabaseClient();
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      error: error.message || 'Supabase not configured'
+    });
+  }
+
+  try {
+    const minuteLimit = await checkUsageLimit(supabase, {
+      endpoint: 'send-message',
+      apiKeyLabel,
+      limit: usageConfig.sendMessagePerMinute,
+      windowMs: 60 * 1000
+    });
+
+    if (!minuteLimit.allowed) {
+      await logApiUsage(supabase, {
+        ...baseLogEntry,
+        status: 'blocked',
+        errorMessage: 'Rate limit exceeded',
+        metadata: {
+          ...baseLogEntry.metadata,
+          reason: 'per_minute_limit',
+          limit: minuteLimit.limit,
+          currentCount: minuteLimit.currentCount
+        }
+      });
+
+      return res.status(429).json({
+        success: false,
+        error: 'Rate limit exceeded. Please retry later.',
+        retry_after_seconds: minuteLimit.retryAfterSeconds
+      });
+    }
+
+    const dailyLimit = await checkUsageLimit(supabase, {
+      endpoint: 'send-message',
+      apiKeyLabel,
+      limit: usageConfig.sendMessageDaily,
+      windowMs: 24 * 60 * 60 * 1000,
+      statuses: ['sent']
+    });
+
+    if (!dailyLimit.allowed) {
+      await logApiUsage(supabase, {
+        ...baseLogEntry,
+        status: 'blocked',
+        errorMessage: 'Daily sending limit reached',
+        metadata: {
+          ...baseLogEntry.metadata,
+          reason: 'daily_limit',
+          limit: dailyLimit.limit,
+          currentCount: dailyLimit.currentCount
+        }
+      });
+
+      return res.status(429).json({
+        success: false,
+        error: 'Daily sending limit reached.'
+      });
+    }
+  } catch (error) {
+    await logApiUsage(supabase, {
+      ...baseLogEntry,
+      status: 'failed',
+      errorMessage: error.message || 'Failed to enforce usage limits'
+    });
+
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      error: error.message || 'Failed to enforce usage limits'
+    });
+  }
+
   try {
     await sendWhatsAppMessage(normalizedPhone, messageType, normalizedPayload.value, requestId);
+    await logApiUsage(supabase, {
+      ...baseLogEntry,
+      status: 'sent'
+    });
 
     return res.status(200).json({
       success: true,
       message: 'Message sent successfully'
     });
   } catch (error) {
+    await logApiUsage(supabase, {
+      ...baseLogEntry,
+      status: 'failed',
+      errorMessage: error.message || 'Failed to send message'
+    });
+
     return res.status(error.statusCode || 500).json({
       success: false,
       error: error.message || 'Failed to send message'
