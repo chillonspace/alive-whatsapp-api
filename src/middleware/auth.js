@@ -1,5 +1,6 @@
 function requireApiKey(req, res, next) {
   const configuredApiKey = process.env.CLIENT_API_KEY;
+  const apiKeyLabel = process.env.CLIENT_API_LABEL || 'client_main';
 
   if (!configuredApiKey) {
     return res.status(500).json({
@@ -17,6 +18,8 @@ function requireApiKey(req, res, next) {
       error: 'Invalid or missing X-API-Key header'
     });
   }
+
+  req.apiKeyLabel = apiKeyLabel;
 
   return next();
 }

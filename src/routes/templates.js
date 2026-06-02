@@ -3,6 +3,7 @@ const { requireApiKey } = require('../middleware/auth');
 const { getSupabaseClient } = require('../config/supabase');
 const { convertNamedPlaceholdersToPositional } = require('../services/templateMappingService');
 const { createTemplate, listTemplates } = require('../services/chakraTemplateService');
+const { checkUsageLimit, getUsageConfig, logApiUsage } = require('../services/apiUsageService');
 
 const router = express.Router();
 
@@ -166,6 +167,8 @@ function validateCreateBody(body) {
 
 router.post('/templates', requireApiKey, async (req, res) => {
   const runId = newRunId('tpl_create');
+  const usageConfig = getUsageConfig();
+  const apiKeyLabel = req.apiKeyLabel || 'client_main';
   const validationError = validateCreateBody(req.body);
 
   if (validationError) {
@@ -207,6 +210,55 @@ router.post('/templates', requireApiKey, async (req, res) => {
     });
   }
 
+  const baseLogEntry = {
+    requestId: runId,
+    endpoint: 'templates-create',
+    apiKeyLabel,
+    templateName,
+    language,
+    imageUrlPresent: header?.type === 'IMAGE',
+    variablesKeys: Array.isArray(variables) ? variables : []
+  };
+
+  try {
+    const createLimit = await checkUsageLimit(supabase, {
+      endpoint: 'templates-create',
+      apiKeyLabel,
+      limit: usageConfig.templateCreatePerHour,
+      windowMs: 60 * 60 * 1000
+    });
+
+    if (!createLimit.allowed) {
+      await logApiUsage(supabase, {
+        ...baseLogEntry,
+        status: 'blocked',
+        errorMessage: 'Template create rate limit exceeded',
+        metadata: {
+          reason: 'template_create_hourly_limit',
+          limit: createLimit.limit,
+          currentCount: createLimit.currentCount
+        }
+      });
+
+      return res.status(429).json({
+        success: false,
+        error: 'Template create rate limit exceeded. Please retry later.',
+        retry_after_seconds: createLimit.retryAfterSeconds
+      });
+    }
+  } catch (err) {
+    await logApiUsage(supabase, {
+      ...baseLogEntry,
+      status: 'failed',
+      errorMessage: err.message || 'Failed to enforce template create usage limits'
+    });
+
+    return res.status(err.statusCode || 500).json({
+      success: false,
+      error: err.message || 'Failed to enforce template create usage limits'
+    });
+  }
+
   let chakraResult;
   try {
     chakraResult = await createTemplate({
@@ -220,6 +272,13 @@ router.post('/templates', requireApiKey, async (req, res) => {
       header
     });
   } catch (err) {
+    await logApiUsage(supabase, {
+      ...baseLogEntry,
+      status: 'failed',
+      errorMessage: err.message || 'Failed to create template via ChakraHQ',
+      metadata: { upstream: err.upstream || null }
+    });
+
     return res.status(err.statusCode || 500).json({
       success: false,
       error: err.message || 'Failed to create template via ChakraHQ',
@@ -262,6 +321,17 @@ router.post('/templates', requireApiKey, async (req, res) => {
       error: upsertError.message || upsertError
     });
 
+    await logApiUsage(supabase, {
+      ...baseLogEntry,
+      status: 'failed',
+      errorMessage: 'Template was created in ChakraHQ but failed to save in Supabase',
+      metadata: {
+        chakra_template_id: chakraTemplateId,
+        template_status: status,
+        detail: upsertError.message || null
+      }
+    });
+
     return res.status(500).json({
       success: false,
       error: 'Template was created in ChakraHQ but failed to save in Supabase',
@@ -270,6 +340,15 @@ router.post('/templates', requireApiKey, async (req, res) => {
       status
     });
   }
+
+  await logApiUsage(supabase, {
+    ...baseLogEntry,
+    status: 'accepted',
+    metadata: {
+      chakra_template_id: upserted.chakra_template_id || null,
+      template_status: upserted.status || null
+    }
+  });
 
   return res.status(201).json({
     success: true,
