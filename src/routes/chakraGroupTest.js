@@ -12,11 +12,14 @@ router.post('/webhooks/chakra/group-test', async (req, res) => {
   const payload = req.body;
   const detection = detectGroupEvent(payload);
 
-  console.info('Chakra group webhook test payload', {
-    possibleGroupEvent: detection.possibleGroupEvent,
-    detectedKeywords: detection.detectedKeywords,
-    payload
-  });
+  console.info(
+    'Chakra group webhook test payload',
+    JSON.stringify({
+      possibleGroupEvent: detection.possibleGroupEvent,
+      detectedKeywords: detection.detectedKeywords,
+      payload
+    })
+  );
 
   try {
     const logPath = await appendWebhookPayload(payload, detection);

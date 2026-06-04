@@ -119,3 +119,35 @@ test('router exposes public webhook test and protects member-list debug test', (
   assert.ok(debugRoute.methods.get);
   assert.equal(debugRoute.stack[0].handle.name, 'requireApiKey');
 });
+
+test('webhook route logs the full nested payload as JSON', async () => {
+  const router = require('../src/routes/chakraGroupTest');
+  const route = router.stack
+    .filter((layer) => layer.route)
+    .map((layer) => layer.route)
+    .find((item) => item.path === '/webhooks/chakra/group-test');
+  const handler = route.stack[0].handle;
+  const originalInfo = console.info;
+  const logged = [];
+
+  console.info = (...args) => logged.push(args);
+
+  try {
+    await handler(
+      { body: { entry: [{ changes: [{ value: { messages: [{ from: '60123456789' }] } }] }] } },
+      {
+        status() {
+          return this;
+        },
+        json(body) {
+          return body;
+        }
+      }
+    );
+  } finally {
+    console.info = originalInfo;
+    fs.rmSync(path.join(process.cwd(), 'logs'), { recursive: true, force: true });
+  }
+
+  assert.match(logged[0][1], /"messages":\[\{"from":"60123456789"\}\]/);
+});
