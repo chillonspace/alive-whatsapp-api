@@ -8,6 +8,7 @@ const {
   buildGroupTestRequests,
   detectGroupEvent,
   executeGroupMemberListTest,
+  findGroupIds,
   getWebhookLogPath,
   inspectMemberResponse
 } = require('../src/services/chakraGroupTestService');
@@ -77,6 +78,20 @@ test('group test requests use the four required candidate endpoints', () => {
   );
 });
 
+test('group discovery mode only builds the list-groups request without a group ID', () => {
+  assert.deepEqual(
+    buildGroupTestRequests({ ...config, groupId: '' }).map((request) => request.name),
+    ['listGroups']
+  );
+});
+
+test('findGroupIds extracts nested group_id and groupId values', () => {
+  assert.deepEqual(
+    findGroupIds({ data: [{ group_id: 'group-1' }, { nested: { groupId: 'group-2' } }] }),
+    ['group-1', 'group-2']
+  );
+});
+
 test('member-list test continues after failures and produces capability report', async () => {
   const calledUrls = [];
   const httpClient = {
@@ -104,6 +119,51 @@ test('member-list test continues after failures and produces capability report',
   assert.equal(report.canRetrieveMemberList, true);
   assert.equal(report.testStudentFoundInMemberList, true);
   assert.equal(report.results.length, 4);
+});
+
+test('discovery mode finds a group ID and continues member-list tests', async () => {
+  const calledUrls = [];
+  const httpClient = {
+    async get(url) {
+      calledUrls.push(url);
+
+      if (url.endsWith('/groups')) {
+        return { status: 200, data: { data: [{ group_id: 'discovered-group' }] } };
+      }
+      if (url.endsWith('/participants')) {
+        return { status: 200, data: { participants: [{ wa_id: '60123456789' }] } };
+      }
+
+      return { status: 200, data: {} };
+    }
+  };
+
+  const report = await executeGroupMemberListTest({
+    config: { ...config, groupId: '' },
+    httpClient
+  });
+
+  assert.equal(calledUrls.length, 4);
+  assert.deepEqual(report.discoveredGroupIds, ['discovered-group']);
+  assert.equal(report.testedGroupId, 'discovered-group');
+  assert.equal(report.discoveryOnly, false);
+  assert.equal(report.canRetrieveMemberList, true);
+});
+
+test('discovery mode reports no group ID when list-groups returns no IDs', async () => {
+  const report = await executeGroupMemberListTest({
+    config: { ...config, groupId: '' },
+    httpClient: {
+      async get() {
+        return { status: 200, data: { data: [] } };
+      }
+    }
+  });
+
+  assert.equal(report.results.length, 1);
+  assert.deepEqual(report.discoveredGroupIds, []);
+  assert.equal(report.testedGroupId, null);
+  assert.equal(report.discoveryOnly, true);
 });
 
 test('router exposes public webhook test and protects member-list debug test', () => {

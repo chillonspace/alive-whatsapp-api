@@ -31,4 +31,6 @@
 ## 当前验证状态
 
 - Automated tests 已验证 webhook route、关键词检测、JSONL 写入、debug authentication、四个 API request 的 continue-on-error 行为与 capability report。
-- 真实 Chakra / Meta 是否发送群组事件或返回 member list，仍需部署后按 README 操作进行人工测试。
+- Discovery mode 可在没有 `TEST_GROUP_ID` 时先调用 List Groups，并在发现 ID 后自动继续测试。
+- 真实 Pass-through webhook 已接通，但 join、group message 与 leave 均未产生 webhook event。
+- 真实 List Groups API 使用 `v22.0` 与 `v23.0` 均返回 Meta OAuthException code `131000`，未发现 group ID，无法继续取得 participant/member list。

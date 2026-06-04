@@ -195,6 +195,8 @@ curl http://localhost:3000/debug/chakra/group-member-list-test \
   -H "X-API-Key: replace_with_my_client_api_key"
 ```
 
+`TEST_GROUP_ID` is optional. When it is missing, the endpoint first calls List Groups. If Chakra returns a `group_id` or `groupId`, the endpoint automatically tests that discovered group's info, participants, and members.
+
 The member-list comparison solution is possible when `canRetrieveMemberList` is `true` and a result contains participants, members, phone, or `wa_id` data. `testStudentFoundInMemberList` reports whether the normalized `TEST_STUDENT_PHONE` appears in a participant/member response.
 
 ### GET /health

@@ -60,6 +60,25 @@ function scalarValues(value) {
   return [value];
 }
 
+function findGroupIds(value, parentKey = '') {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => findGroupIds(item, parentKey));
+  }
+
+  if (!value || typeof value !== 'object') {
+    if (
+      typeof value === 'string' &&
+      ['group_id', 'groupid'].includes(String(parentKey).toLowerCase())
+    ) {
+      return [value];
+    }
+
+    return [];
+  }
+
+  return Object.entries(value).flatMap(([key, item]) => findGroupIds(item, key));
+}
+
 function inspectMemberResponse(data, testStudentPhone) {
   const inspected = stringifyForInspection(data);
   const detectedMemberKeywords = MEMBER_DATA_KEYWORDS.filter((keyword) => inspected.includes(keyword));
@@ -98,17 +117,16 @@ function getGroupTestConfig(env = process.env) {
   const accessToken = env.CHAKRA_API_KEY || env.CHAKRA_ACCESS_TOKEN;
   const apiVersion = env.WHATSAPP_API_VERSION || env.CHAKRA_WA_API_VERSION;
   const phoneNumberId = env.WHATSAPP_PHONE_NUMBER_ID || env.CHAKRA_PHONE_NUMBER_ID;
-  const groupId = env.TEST_GROUP_ID;
+  const groupId = isConfiguredValue(env.TEST_GROUP_ID) ? env.TEST_GROUP_ID.trim() : '';
   const testStudentPhone = env.TEST_STUDENT_PHONE || '';
 
   if (
     !isConfiguredValue(accessToken) ||
     !isConfiguredValue(apiVersion) ||
-    !isConfiguredValue(phoneNumberId) ||
-    !isConfiguredValue(groupId)
+    !isConfiguredValue(phoneNumberId)
   ) {
     const error = new Error(
-      'Server configuration is incomplete: Chakra access token, WhatsApp API version, phone number ID, or TEST_GROUP_ID is not configured'
+      'Server configuration is incomplete: Chakra access token, WhatsApp API version, or phone number ID is not configured'
     );
     error.statusCode = 500;
     throw error;
@@ -119,26 +137,27 @@ function getGroupTestConfig(env = process.env) {
 
 function buildGroupTestRequests(config) {
   const versionRoot = `${config.baseUrl}/v1/whatsapp/${encodeURIComponent(config.apiVersion)}`;
-  const groupId = encodeURIComponent(config.groupId);
-
-  return [
+  const requests = [
     {
       name: 'listGroups',
       url: `${versionRoot}/${encodeURIComponent(config.phoneNumberId)}/groups`
-    },
-    {
-      name: 'getGroupInfo',
-      url: `${versionRoot}/groups/${groupId}`
-    },
-    {
-      name: 'getGroupParticipants',
-      url: `${versionRoot}/groups/${groupId}/participants`
-    },
-    {
-      name: 'getGroupMembers',
-      url: `${versionRoot}/groups/${groupId}/members`
     }
   ];
+
+  if (config.groupId) {
+    requests.push({
+      name: 'getGroupInfo',
+      url: `${versionRoot}/groups/${encodeURIComponent(config.groupId)}`
+    }, {
+      name: 'getGroupParticipants',
+      url: `${versionRoot}/groups/${encodeURIComponent(config.groupId)}/participants`
+    }, {
+      name: 'getGroupMembers',
+      url: `${versionRoot}/groups/${encodeURIComponent(config.groupId)}/members`
+    });
+  }
+
+  return requests;
 }
 
 async function executeGroupMemberListTest(options = {}) {
@@ -146,8 +165,9 @@ async function executeGroupMemberListTest(options = {}) {
   const httpClient = options.httpClient || axios;
   const requests = buildGroupTestRequests(config);
   const results = [];
+  let discoveredGroupIds = [];
 
-  for (const request of requests) {
+  async function executeRequest(request) {
     try {
       const response = await httpClient.get(request.url, {
         headers: {
@@ -167,6 +187,7 @@ async function executeGroupMemberListTest(options = {}) {
 
       console.info('Chakra group API test response', result);
       results.push(result);
+      return result;
     } catch (err) {
       const responseBody = err.response?.data || { message: err.message || 'Unknown request error' };
       const inspection = inspectMemberResponse(responseBody, config.testStudentPhone);
@@ -181,6 +202,26 @@ async function executeGroupMemberListTest(options = {}) {
 
       console.error('Chakra group API test failed', result);
       results.push(result);
+      return result;
+    }
+  }
+
+  for (const request of requests) {
+    await executeRequest(request);
+  }
+
+  const listGroupsResult = results.find((result) => result.name === 'listGroups');
+  if (listGroupsResult?.success) {
+    discoveredGroupIds = [...new Set(findGroupIds(listGroupsResult.response))];
+  }
+
+  let testedGroupId = config.groupId || '';
+  if (!testedGroupId && discoveredGroupIds.length > 0) {
+    testedGroupId = discoveredGroupIds[0];
+    const discoveredRequests = buildGroupTestRequests({ ...config, groupId: testedGroupId }).slice(1);
+
+    for (const request of discoveredRequests) {
+      await executeRequest(request);
     }
   }
 
@@ -190,6 +231,9 @@ async function executeGroupMemberListTest(options = {}) {
   return {
     ok: true,
     canReceiveWebhookNeedsManualTest: true,
+    discoveryOnly: !testedGroupId,
+    discoveredGroupIds,
+    testedGroupId: testedGroupId || null,
     canListGroups: !!byName.listGroups?.success,
     canGetGroupInfo: !!byName.getGroupInfo?.success,
     canRetrieveMemberList: memberResults.some((result) => result?.success && result.containsMemberData),
@@ -207,5 +251,6 @@ module.exports = {
   getGroupTestConfig,
   getWebhookLogPath,
   inspectMemberResponse,
+  findGroupIds,
   normalizePhone
 };
