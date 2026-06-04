@@ -14,12 +14,12 @@
 
 - Production baseline：`main`
 - 当前稳定开发基线：`image-header-template`
-- 治理基础：建设中
+- 治理基础：已建立，并统一使用根目录 `AGENTS.md`
 - Chakra 群组检测：代码测试完成，等待真实 Chakra / Meta 环境人工验证
 
 ## 记录位置
 
-- Agent 规则：`AGENTS.md`
+- 唯一 Agent 规则：`AGENTS.md`
 - 每日开发日志：`dev-logs/YYYY-MM-DD.md`
 - 环境变量示例：`.env.example`
 - 运行与 API 使用说明：`README.md`

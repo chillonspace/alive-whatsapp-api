@@ -1,6 +1,6 @@
 # Agent 工作指引
 
-本文件是仓库内 Agent 工作规则的唯一完整来源。`CLAUDE.md` 与 `AGENT.md` 仅提供兼容入口。
+本文件是仓库内唯一的 Agent 工作指引。不要创建 `AGENT.md`、`CLAUDE.md` 或其他重复规则文件；所有 Agent 规则统一维护在此处。
 
 ## 开工前
 
