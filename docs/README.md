@@ -15,7 +15,7 @@
 - Production baseline：`main`
 - 当前稳定开发基线：`image-header-template`
 - 治理基础：建设中
-- Chakra 群组检测：等待治理基础验证完成后实施
+- Chakra 群组检测：代码测试完成，等待真实 Chakra / Meta 环境人工验证
 
 ## 记录位置
 

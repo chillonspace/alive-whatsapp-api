@@ -27,3 +27,8 @@
 - 保存每个 request 的 status 与 response evidence。
 - 更新当日开发日志，记录可行性结论与限制。
 - 不在此次测试中建设 database、scheduler、frontend 或 production automation。
+
+## 当前验证状态
+
+- Automated tests 已验证 webhook route、关键词检测、JSONL 写入、debug authentication、四个 API request 的 continue-on-error 行为与 capability report。
+- 真实 Chakra / Meta 是否发送群组事件或返回 member list，仍需部署后按 README 操作进行人工测试。

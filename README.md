@@ -170,6 +170,33 @@ Why Supabase is needed:
 
 ## Endpoints
 
+### Temporary Chakra Group Capability Tests
+
+These isolated endpoints test whether Chakra / Meta exposes WhatsApp Group membership events or member lists. They do not change the existing Template API.
+
+Configure the group test variables from `.env.example`, then start the API:
+
+```bash
+npm start
+```
+
+Set the Chakra webhook URL to:
+
+```text
+https://YOUR_DEPLOYMENT_URL/webhooks/chakra/group-test
+```
+
+Manually join, leave, request access, or remove a test phone. The webhook solution is possible when the response reports `possibleGroupEvent: true` and the console or JSONL log contains the corresponding group event. Local JSONL entries are written to `logs/group-webhook-test.jsonl`; Vercel writes a temporary `/tmp/group-webhook-test.jsonl`, so Vercel console logs are the primary evidence.
+
+Run the authenticated member-list test:
+
+```bash
+curl http://localhost:3000/debug/chakra/group-member-list-test \
+  -H "X-API-Key: replace_with_my_client_api_key"
+```
+
+The member-list comparison solution is possible when `canRetrieveMemberList` is `true` and a result contains participants, members, phone, or `wa_id` data. `testStudentFoundInMemberList` reports whether the normalized `TEST_STUDENT_PHONE` appears in a participant/member response.
+
 ### GET /health
 
 ```bash
