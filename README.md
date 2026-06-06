@@ -106,6 +106,7 @@ DUPLICATE_WINDOW_MINUTES=10
 
 Important details:
 
+- Alive API also loads shared cross-project env values from `/Users/chillon/Documents/Codex/shared/alive.env`.
 - `CLIENT_API_KEY` is required for every business endpoint.
 - `/templates` and `/send-template` expect the key in the `X-API-Key` header.
 - `/send-message` is the legacy endpoint and expects `api_key` in the JSON body.
@@ -169,6 +170,76 @@ Why Supabase is needed:
 - The API uses logs to enforce rate limits, daily caps, and duplicate-send protection.
 
 ## Endpoints
+
+### GET /alive/groups
+
+Returns the latest Alive Group Monitor export. This is the customer-facing groups endpoint; it reads the JSON file produced by the Group Monitor project and returns that JSON directly.
+
+Source file:
+
+```text
+/Users/chillon/Documents/Alive Group Monitor/private-exports/alive-groups-response.json
+```
+
+```bash
+curl http://localhost:3000/alive/groups \
+  -H "X-API-Key: replace_with_my_client_api_key"
+```
+
+Expected response shape:
+
+```json
+{
+  "exportedAt": "2026-06-06T12:00:00.000Z",
+  "status": "ok",
+  "groups": [
+    {
+      "groupKey": "alive-sharing",
+      "groupName": "ALIVE Sharing Group分享群",
+      "status": "ok",
+      "memberCount": 123,
+      "unresolvedCount": 0,
+      "phones": ["60123456789", "886912345678", "6591234567"]
+    }
+  ]
+}
+```
+
+Failure behavior:
+
+- missing or wrong `X-API-Key` returns `401`
+- missing export file returns `503`
+- invalid export JSON returns `500`
+- the endpoint does not return partial fallback data
+
+### Temporary Chakra Group Capability Tests
+
+These isolated endpoints test whether Chakra / Meta exposes WhatsApp Group membership events or member lists. They do not change the existing Template API.
+
+Configure the group test variables from `.env.example`, then start the API:
+
+```bash
+npm start
+```
+
+Set the Chakra webhook URL to:
+
+```text
+https://YOUR_DEPLOYMENT_URL/webhooks/chakra/group-test
+```
+
+Manually join, leave, request access, or remove a test phone. The webhook solution is possible when the response reports `possibleGroupEvent: true` and the console or JSONL log contains the corresponding group event. Local JSONL entries are written to `logs/group-webhook-test.jsonl`; Vercel writes a temporary `/tmp/group-webhook-test.jsonl`, so Vercel console logs are the primary evidence.
+
+Run the authenticated member-list test:
+
+```bash
+curl http://localhost:3000/debug/chakra/group-member-list-test \
+  -H "X-API-Key: replace_with_my_client_api_key"
+```
+
+`TEST_GROUP_ID` is optional. When it is missing, the endpoint first calls List Groups. If Chakra returns a `group_id` or `groupId`, the endpoint automatically tests that discovered group's info, participants, and members.
+
+The member-list comparison solution is possible when `canRetrieveMemberList` is `true` and a result contains participants, members, phone, or `wa_id` data. `testStudentFoundInMemberList` reports whether the normalized `TEST_STUDENT_PHONE` appears in a participant/member response.
 
 ### GET /health
 

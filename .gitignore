@@ -1,6 +1,9 @@
 .vercel
 .env
+.env.local
+alive.env
 !.env.example
 node_modules/
 .DS_Store
 .cursor/*.log
+logs/*.jsonl
