@@ -106,6 +106,7 @@ DUPLICATE_WINDOW_MINUTES=10
 
 Important details:
 
+- Alive API also loads shared cross-project env values from `/Users/chillon/Documents/Codex/shared/alive.env`.
 - `CLIENT_API_KEY` is required for every business endpoint.
 - `/templates` and `/send-template` expect the key in the `X-API-Key` header.
 - `/send-message` is the legacy endpoint and expects `api_key` in the JSON body.
@@ -169,6 +170,47 @@ Why Supabase is needed:
 - The API uses logs to enforce rate limits, daily caps, and duplicate-send protection.
 
 ## Endpoints
+
+### GET /alive/groups
+
+Returns the latest Alive Group Monitor export. This is the customer-facing groups endpoint; it reads the JSON file produced by the Group Monitor project and returns that JSON directly.
+
+Source file:
+
+```text
+/Users/chillon/Documents/Alive Group Monitor/private-exports/alive-groups-response.json
+```
+
+```bash
+curl http://localhost:3000/alive/groups \
+  -H "X-API-Key: replace_with_my_client_api_key"
+```
+
+Expected response shape:
+
+```json
+{
+  "exportedAt": "2026-06-06T12:00:00.000Z",
+  "status": "ok",
+  "groups": [
+    {
+      "groupKey": "alive-sharing",
+      "groupName": "ALIVE Sharing Group分享群",
+      "status": "ok",
+      "memberCount": 123,
+      "unresolvedCount": 0,
+      "phones": ["60123456789", "886912345678", "6591234567"]
+    }
+  ]
+}
+```
+
+Failure behavior:
+
+- missing or wrong `X-API-Key` returns `401`
+- missing export file returns `503`
+- invalid export JSON returns `500`
+- the endpoint does not return partial fallback data
 
 ### Temporary Chakra Group Capability Tests
 

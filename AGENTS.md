@@ -16,6 +16,8 @@
 - 修改前确认范围；不进行无关重构。
 - 未经明确要求，不修改现有 Template API 的行为或接口。
 - 不提交 credentials、API token、完整手机号、真实 webhook payload 或其他敏感信息。
+- Alive API 与相关项目统一从共享 env 文件 `/Users/chillon/Documents/Codex/shared/alive.env` 读取 `CLIENT_API_KEY`。
+- 新增受保护 endpoint 统一使用 `X-API-Key` header 校验 `process.env.CLIENT_API_KEY`；不要使用 `Authorization: Bearer`，也不要在 JSON body 里传 `api_key`，除非是旧接口兼容。
 - 每个阶段完成后运行相关测试，再运行完整 `npm test`。
 
 ## 收尾要求
