@@ -173,12 +173,14 @@ Why Supabase is needed:
 
 ### GET /alive/groups
 
-Returns the latest Alive Group Monitor export. This is the customer-facing groups endpoint; it reads the JSON file produced by the Group Monitor project and returns that JSON directly.
+Returns the latest Alive Group Monitor export. This is the customer-facing
+groups endpoint; it reads the latest successful Group Monitor response from
+Supabase and returns that JSON directly.
 
-Source file:
+Source table:
 
 ```text
-/Users/chillon/Documents/Alive Group Monitor/private-exports/alive-groups-response.json
+alive_group_exports, row id = latest
 ```
 
 ```bash
@@ -208,8 +210,13 @@ Expected response shape:
 Failure behavior:
 
 - missing or wrong `X-API-Key` returns `401`
-- missing export file returns `503`
-- invalid export JSON returns `500`
+- no successful Supabase export row returns `503`
+- Supabase query failure returns `500`
+- if the latest automatic refresh failed but an older successful response still
+  exists, the endpoint returns that last good response with stale headers:
+  - `X-Alive-Groups-Data-Status: stale`
+  - `X-Alive-Groups-Exported-At`
+  - `X-Alive-Groups-Last-Attempt-At`
 - the endpoint does not return partial fallback data
 
 ### Temporary Chakra Group Capability Tests

@@ -84,3 +84,34 @@ create index if not exists api_usage_logs_request_hash_idx
 
 create index if not exists api_usage_logs_template_created_idx
   on api_usage_logs (template_name, language, created_at desc);
+
+-- Latest Alive Group Monitor export.
+-- Stores only the latest successful response JSON; failure upserts update
+-- metadata without overwriting the last good response.
+create table if not exists alive_group_exports (
+  id text primary key,
+  exported_at timestamptz,
+  status text not null,
+  response jsonb,
+  group_count integer,
+  total_member_count integer,
+  last_attempt_at timestamptz not null default now(),
+  last_success_at timestamptz,
+  last_error_at timestamptz,
+  last_error_message text,
+  updated_at timestamptz not null default now()
+);
+
+create or replace function alive_group_exports_set_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists alive_group_exports_updated_at on alive_group_exports;
+
+create trigger alive_group_exports_updated_at
+before update on alive_group_exports
+for each row execute function alive_group_exports_set_updated_at();

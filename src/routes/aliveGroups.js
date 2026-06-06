@@ -1,44 +1,54 @@
-const fs = require('fs/promises');
 const express = require('express');
+const { getSupabaseClient } = require('../config/supabase');
 const { requireApiKey } = require('../middleware/auth');
 
-const DEFAULT_GROUPS_RESPONSE_PATH =
-  '/Users/chillon/Documents/Alive Group Monitor/private-exports/alive-groups-response.json';
+const TABLE = 'alive_group_exports';
+const LATEST_ID = 'latest';
 
-async function readGroupsResponse(responsePath = DEFAULT_GROUPS_RESPONSE_PATH) {
-  let raw;
+async function readGroupsResponse(supabase = getSupabaseClient()) {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('response, exported_at, last_attempt_at, last_error_at')
+    .eq('id', LATEST_ID)
+    .maybeSingle();
 
-  try {
-    raw = await fs.readFile(responsePath, 'utf8');
-  } catch (err) {
-    if (err.code === 'ENOENT') {
-      const error = new Error('Alive groups export is not available');
-      error.statusCode = 503;
-      throw error;
-    }
-
-    const error = new Error('Failed to read Alive groups export');
-    error.statusCode = 500;
-    throw error;
+  if (error) {
+    const routeError = new Error('Failed to load Alive groups export');
+    routeError.statusCode = 500;
+    throw routeError;
   }
 
-  try {
-    return JSON.parse(raw);
-  } catch (_err) {
-    const error = new Error('Alive groups export is invalid');
-    error.statusCode = 500;
-    throw error;
+  if (!data?.response) {
+    const routeError = new Error('Alive groups export is not available');
+    routeError.statusCode = 503;
+    throw routeError;
   }
+
+  return {
+    response: data.response,
+    exportedAt: data.exported_at || data.response.exportedAt,
+    lastAttemptAt: data.last_attempt_at,
+    stale: Boolean(data.last_error_at)
+  };
 }
 
 function createAliveGroupsRouter(options = {}) {
   const router = express.Router();
-  const responsePath = options.responsePath || DEFAULT_GROUPS_RESPONSE_PATH;
+  const supabase = options.supabase;
 
   router.get('/alive/groups', requireApiKey, async (_req, res) => {
     try {
-      const body = await readGroupsResponse(responsePath);
-      return res.status(200).json(body);
+      const latest = await readGroupsResponse(supabase);
+      if (latest.stale) {
+        res.set('X-Alive-Groups-Data-Status', 'stale');
+        if (latest.exportedAt) {
+          res.set('X-Alive-Groups-Exported-At', latest.exportedAt);
+        }
+        if (latest.lastAttemptAt) {
+          res.set('X-Alive-Groups-Last-Attempt-At', latest.lastAttemptAt);
+        }
+      }
+      return res.status(200).json(latest.response);
     } catch (err) {
       return res.status(err.statusCode || 500).json({
         success: false,
@@ -53,4 +63,3 @@ function createAliveGroupsRouter(options = {}) {
 module.exports = createAliveGroupsRouter();
 module.exports.createAliveGroupsRouter = createAliveGroupsRouter;
 module.exports.readGroupsResponse = readGroupsResponse;
-module.exports.DEFAULT_GROUPS_RESPONSE_PATH = DEFAULT_GROUPS_RESPONSE_PATH;
