@@ -1,6 +1,9 @@
 const express = require('express');
 const { getSupabaseClient } = require('../config/supabase');
 const { requireApiKey } = require('../middleware/auth');
+const {
+  logAliveGroupPullReceipt
+} = require('../services/aliveGroupPullReceiptService');
 
 const TABLE = 'alive_group_exports';
 const LATEST_ID = 'latest';
@@ -35,10 +38,26 @@ async function readGroupsResponse(supabase = getSupabaseClient()) {
 function createAliveGroupsRouter(options = {}) {
   const router = express.Router();
   const supabase = options.supabase;
+  const logPullReceipt = options.logPullReceipt || logAliveGroupPullReceipt;
 
   router.get('/alive/groups', requireApiKey, async (_req, res) => {
     try {
-      const latest = await readGroupsResponse(supabase);
+      const client = supabase || getSupabaseClient();
+      const latest = await readGroupsResponse(client);
+      try {
+        await logPullReceipt(client, {
+          consumerId: 'alive_groups_customer',
+          responseStatus: 200,
+          exportedAt: latest.exportedAt
+        });
+      } catch (error) {
+        console.error('Unexpected Alive groups pull receipt failure', {
+          consumerId: 'alive_groups_customer',
+          responseStatus: 200,
+          exportedAt: latest.exportedAt || null,
+          error: error?.message || 'Unknown receipt error'
+        });
+      }
       if (latest.stale) {
         res.set('X-Alive-Groups-Data-Status', 'stale');
         if (latest.exportedAt) {

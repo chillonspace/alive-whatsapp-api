@@ -9,6 +9,7 @@
 3. [工程标准](./engineering-standards.md)
 4. [开发流程](./development-workflow.md)
 5. [Chakra 群组检测测试计划](./group-detection-test-plan.md)
+6. [Alive Groups Pull Receipts 设计](./superpowers/specs/2026-08-02-alive-groups-pull-receipts-design.md)
 
 ## 当前状态
 

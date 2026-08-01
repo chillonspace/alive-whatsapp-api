@@ -115,3 +115,22 @@ drop trigger if exists alive_group_exports_updated_at on alive_group_exports;
 create trigger alive_group_exports_updated_at
 before update on alive_group_exports
 for each row execute function alive_group_exports_set_updated_at();
+
+-- Server-only audit trail for successful customer pulls of the latest export.
+-- Does not store API keys, phone numbers, request IPs, or response JSON.
+create table if not exists alive_group_pull_receipts (
+  id uuid primary key default gen_random_uuid(),
+  consumer_id text not null,
+  requested_at timestamptz not null default now(),
+  response_status integer not null check (response_status between 100 and 599),
+  exported_at timestamptz,
+  success boolean not null
+);
+
+create index if not exists alive_group_pull_receipts_consumer_requested_idx
+  on alive_group_pull_receipts (consumer_id, requested_at desc);
+
+alter table alive_group_pull_receipts enable row level security;
+
+revoke all on table alive_group_pull_receipts from public, anon, authenticated, service_role;
+grant select, insert on table alive_group_pull_receipts to service_role;

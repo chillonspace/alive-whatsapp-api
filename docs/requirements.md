@@ -10,6 +10,7 @@ Alive WhatsApp API 通过 Express 提供 ChakraHQ WhatsApp 消息与 Template AP
 - 创建、列出和发送带 named variables 的 templates。
 - 支持无 header、text header 与 image header。
 - 使用 API key、rate limits、daily caps 和 duplicate protection 保护业务 endpoint。
+- 通过 `GET /alive/groups` 返回最新 Group Monitor export，并在 Supabase 记录成功的客户 pull receipt。
 - 通过同一 Express app 支持本地 Node.js 与 Vercel 部署。
 
 ## 当前开发需求

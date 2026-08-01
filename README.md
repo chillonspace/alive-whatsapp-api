@@ -219,6 +219,46 @@ Failure behavior:
   - `X-Alive-Groups-Last-Attempt-At`
 - the endpoint does not return partial fallback data
 
+Pull tracking:
+
+- every authenticated request that successfully loads the latest export
+  attempts to write one server-side row to `alive_group_pull_receipts`
+- the customer continues using the same URL, method, `X-API-Key`, and response
+  format; no webhook or ACK is required
+- tracking is best-effort: if the receipt insert fails, the groups JSON still
+  returns normally and the server writes a safe error log; inserts use a
+  one-second abort timeout and an application-generated UUID as a stable
+  identity if insert-level retries are introduced later
+- receipt rows contain the generated `id`, `consumer_id`, `requested_at`,
+  `response_status`, `exported_at`, and `success`; they do not contain API keys,
+  IP addresses, phone numbers, User-Agent values, or response JSON
+- a new customer HTTP request, including a customer-initiated retry, is a new
+  pull and is counted separately
+- RLS is enabled, `anon` and `authenticated` have no access, and the server-side
+  `service_role` has only `SELECT` and `INSERT`
+
+Internal receipt queries:
+
+```sql
+-- Total successful pulls and latest successful pull time.
+select
+  count(*) as total_pulls,
+  max(requested_at) as last_pulled_at
+from alive_group_pull_receipts
+where consumer_id = 'alive_groups_customer'
+  and success = true;
+
+-- Recent pull history in Malaysia time.
+select
+  requested_at at time zone 'Asia/Kuala_Lumpur' as requested_at_malaysia,
+  response_status,
+  exported_at
+from alive_group_pull_receipts
+where consumer_id = 'alive_groups_customer'
+order by requested_at desc
+limit 20;
+```
+
 ### Temporary Chakra Group Capability Tests
 
 These isolated endpoints test whether Chakra / Meta exposes WhatsApp Group membership events or member lists. They do not change the existing Template API.

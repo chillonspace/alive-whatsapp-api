@@ -53,7 +53,10 @@ response、docs、tests 或 logs。
 6. Route 原样返回 HTTP 200 与现有 groups JSON。
 
 Receipt insert 必须被 `await`，避免 Vercel serverless function 在异步写入完成前
-结束。它会增加一次很小的 Supabase insert 延迟，但能提供稳定的持久记录。
+结束。Insert 使用一秒 `AbortSignal` timeout；route 另设最终 fail-open boundary，
+避免 tracking dependency 挂起或意外 rejection 改变客户 response。每次 request
+在构建 insert 前生成固定 UUID，作为未来 insert-level retry 的稳定 identity。
+客户重新发出的 HTTP request 是新的 pull，因此仍建立新的 receipt。
 
 ## 错误处理
 
@@ -62,6 +65,8 @@ Receipt 是 best-effort audit，不是客户 API 的业务依赖：
 - Insert 成功：正常返回现有 HTTP 200 response。
 - Insert 失败：记录不含敏感数据的 server error，然后仍然返回现有 HTTP 200
   response。
+- Insert 超过一秒：abort tracking request、记录安全 server error，并继续返回现有
+  HTTP 200 response。
 - Latest export 读取失败或不存在：保留现有 500/503 behavior，不写成功 receipt。
 - Authentication 失败：保留现有 401 behavior，不写 receipt。
 
@@ -99,4 +104,3 @@ Receipt 是 best-effort audit，不是客户 API 的业务依赖：
 - `GET /alive/groups` 的透明记录接入。
 - Focused tests 与完整 regression tests。
 - README、architecture 与当日开发日志同步。
-
