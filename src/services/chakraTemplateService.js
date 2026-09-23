@@ -22,11 +22,11 @@ function isConfiguredValue(value) {
   );
 }
 
-function getChakraEnv() {
-  const baseUrl = (process.env.CHAKRA_API_BASE_URL || 'https://api.chakrahq.com').replace(/\/+$/, '');
-  const accessToken = process.env.CHAKRA_ACCESS_TOKEN;
-  const apiVersion = process.env.CHAKRA_WA_API_VERSION;
-  const wabaId = process.env.CHAKRA_TEST_WABA_ID;
+function validateTemplateConfiguration(env = process.env) {
+  const baseUrl = (env.CHAKRA_API_BASE_URL || 'https://api.chakrahq.com').replace(/\/+$/, '');
+  const accessToken = env.CHAKRA_ACCESS_TOKEN;
+  const apiVersion = env.CHAKRA_WA_API_VERSION;
+  const wabaId = env.CHAKRA_TEST_WABA_ID;
 
   if (
     !isConfiguredValue(accessToken) ||
@@ -99,7 +99,7 @@ function summarizeChakraError(err) {
 }
 
 async function createTemplate({ name, category, language, bodyMeta, examples, variablesOrder, header, runId = 'unknown' }) {
-  const { baseUrl, accessToken, apiVersion, wabaId } = getChakraEnv();
+  const { baseUrl, accessToken, apiVersion, wabaId } = validateTemplateConfiguration();
   const requestBody = buildCreateTemplateRequest({
     name,
     category,
@@ -183,7 +183,7 @@ function buildCreateTemplateRequest({ name, category, language, bodyMeta, exampl
 }
 
 async function listTemplates({ runId = 'unknown' } = {}) {
-  const { baseUrl, accessToken, apiVersion, wabaId } = getChakraEnv();
+  const { baseUrl, accessToken, apiVersion, wabaId } = validateTemplateConfiguration();
 
   const collected = [];
   let nextUrl = buildMessageTemplatesUrl(baseUrl, apiVersion, wabaId, 'limit=100');
@@ -227,5 +227,6 @@ async function listTemplates({ runId = 'unknown' } = {}) {
 module.exports = {
   createTemplate,
   listTemplates,
-  buildCreateTemplateRequest
+  buildCreateTemplateRequest,
+  validateTemplateConfiguration
 };
