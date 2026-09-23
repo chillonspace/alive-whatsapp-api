@@ -98,8 +98,8 @@ SUPABASE_SERVICE_ROLE_KEY=replace_with_supabase_service_role_key
 CLIENT_API_LABEL=client_main
 SEND_MESSAGE_RATE_LIMIT_PER_MINUTE=60
 SEND_MESSAGE_DAILY_LIMIT=1000
-SEND_TEMPLATE_RATE_LIMIT_PER_MINUTE=60
-SEND_TEMPLATE_DAILY_LIMIT=1000
+SEND_TEMPLATE_RATE_LIMIT_PER_MINUTE=180
+SEND_TEMPLATE_DAILY_LIMIT=2000
 TEMPLATE_CREATE_RATE_LIMIT_PER_HOUR=10
 DUPLICATE_WINDOW_MINUTES=10
 ```
@@ -118,8 +118,8 @@ Important details:
 - `CLIENT_API_LABEL` is written to usage logs so you can identify the customer/API key later.
 - `SEND_MESSAGE_RATE_LIMIT_PER_MINUTE` protects the legacy `/send-message` endpoint from sudden spikes.
 - `SEND_MESSAGE_DAILY_LIMIT` is the daily successful send cap for the legacy `/send-message` endpoint.
-- `SEND_TEMPLATE_RATE_LIMIT_PER_MINUTE` protects ChakraHQ, Vercel, and Supabase from sudden spikes.
-- `SEND_TEMPLATE_DAILY_LIMIT` is the daily sending cap for this API key label.
+- `SEND_TEMPLATE_RATE_LIMIT_PER_MINUTE` defaults to 180 requests per rolling minute for `/send-template`; it protects ChakraHQ, Vercel, and Supabase from sudden spikes.
+- `SEND_TEMPLATE_DAILY_LIMIT` defaults to 2,000 successful `/send-template` sends (`sent` usage records) per rolling 24 hours for this API key label.
 - `TEMPLATE_CREATE_RATE_LIMIT_PER_HOUR` keeps template creation low-frequency.
 - `DUPLICATE_WINDOW_MINUTES` controls fallback duplicate protection when no `idempotency_key` is provided.
 

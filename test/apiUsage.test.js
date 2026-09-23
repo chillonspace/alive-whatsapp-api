@@ -12,8 +12,8 @@ test('usage config uses production-safe defaults', () => {
   assert.deepEqual(getUsageConfig({}), {
     sendMessagePerMinute: 60,
     sendMessageDaily: 1000,
-    sendTemplatePerMinute: 60,
-    sendTemplateDaily: 1000,
+    sendTemplatePerMinute: 180,
+    sendTemplateDaily: 2000,
     templateCreatePerHour: 10,
     duplicateWindowMinutes: 10
   });
@@ -39,8 +39,10 @@ test('usage config accepts positive integer overrides only', () => {
     }
   );
 
-  assert.equal(getUsageConfig({ SEND_TEMPLATE_DAILY_LIMIT: '0' }).sendTemplateDaily, 1000);
-  assert.equal(getUsageConfig({ SEND_TEMPLATE_DAILY_LIMIT: 'nope' }).sendTemplateDaily, 1000);
+  assert.equal(getUsageConfig({ SEND_TEMPLATE_RATE_LIMIT_PER_MINUTE: '0' }).sendTemplatePerMinute, 180);
+  assert.equal(getUsageConfig({ SEND_TEMPLATE_RATE_LIMIT_PER_MINUTE: 'nope' }).sendTemplatePerMinute, 180);
+  assert.equal(getUsageConfig({ SEND_TEMPLATE_DAILY_LIMIT: '0' }).sendTemplateDaily, 2000);
+  assert.equal(getUsageConfig({ SEND_TEMPLATE_DAILY_LIMIT: 'nope' }).sendTemplateDaily, 2000);
 });
 
 test('stableStringify sorts object keys deeply', () => {
