@@ -11,8 +11,8 @@ function getUsageConfig(env = process.env) {
   return {
     sendMessagePerMinute: parsePositiveInteger(env.SEND_MESSAGE_RATE_LIMIT_PER_MINUTE, 60),
     sendMessageDaily: parsePositiveInteger(env.SEND_MESSAGE_DAILY_LIMIT, 1000),
-    sendTemplatePerMinute: parsePositiveInteger(env.SEND_TEMPLATE_RATE_LIMIT_PER_MINUTE, 60),
-    sendTemplateDaily: parsePositiveInteger(env.SEND_TEMPLATE_DAILY_LIMIT, 1000),
+    sendTemplatePerMinute: parsePositiveInteger(env.SEND_TEMPLATE_RATE_LIMIT_PER_MINUTE, 180),
+    sendTemplateDaily: parsePositiveInteger(env.SEND_TEMPLATE_DAILY_LIMIT, 2000),
     templateCreatePerHour: parsePositiveInteger(env.TEMPLATE_CREATE_RATE_LIMIT_PER_HOUR, 10),
     duplicateWindowMinutes: parsePositiveInteger(env.DUPLICATE_WINDOW_MINUTES, 10)
   };
