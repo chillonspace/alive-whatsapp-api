@@ -2,8 +2,12 @@ const express = require('express');
 const { requireApiKey } = require('../middleware/auth');
 const { getSupabaseClient } = require('../config/supabase');
 const { convertNamedPlaceholdersToPositional } = require('../services/templateMappingService');
-const { createTemplate, listTemplates } = require('../services/chakraTemplateService');
-const { checkUsageLimit, getUsageConfig, logApiUsage } = require('../services/apiUsageService');
+const {
+  createTemplate,
+  listTemplates,
+  validateTemplateConfiguration
+} = require('../services/chakraTemplateService');
+const { reserveTemplateCreateSlot, getUsageConfig, logApiUsage } = require('../services/apiUsageService');
 
 const router = express.Router();
 
@@ -210,6 +214,15 @@ router.post('/templates', requireApiKey, async (req, res) => {
     });
   }
 
+  try {
+    validateTemplateConfiguration();
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({
+      success: false,
+      error: err.message || 'Template service is not configured'
+    });
+  }
+
   const baseLogEntry = {
     requestId: runId,
     endpoint: 'templates-create',
@@ -221,11 +234,14 @@ router.post('/templates', requireApiKey, async (req, res) => {
   };
 
   try {
-    const createLimit = await checkUsageLimit(supabase, {
-      endpoint: 'templates-create',
+    const createLimit = await reserveTemplateCreateSlot(supabase, {
+      requestId: runId,
       apiKeyLabel,
       limit: usageConfig.templateCreatePerHour,
-      windowMs: 60 * 60 * 1000
+      templateName,
+      language,
+      imageUrlPresent: header?.type === 'IMAGE',
+      variablesKeys: variables
     });
 
     if (!createLimit.allowed) {
@@ -249,7 +265,7 @@ router.post('/templates', requireApiKey, async (req, res) => {
   } catch (err) {
     await logApiUsage(supabase, {
       ...baseLogEntry,
-      status: 'failed',
+      status: 'limit_check_failed',
       errorMessage: err.message || 'Failed to enforce template create usage limits'
     });
 

@@ -13,7 +13,7 @@ function getUsageConfig(env = process.env) {
     sendMessageDaily: parsePositiveInteger(env.SEND_MESSAGE_DAILY_LIMIT, 1000),
     sendTemplatePerMinute: parsePositiveInteger(env.SEND_TEMPLATE_RATE_LIMIT_PER_MINUTE, 180),
     sendTemplateDaily: parsePositiveInteger(env.SEND_TEMPLATE_DAILY_LIMIT, 2000),
-    templateCreatePerHour: parsePositiveInteger(env.TEMPLATE_CREATE_RATE_LIMIT_PER_HOUR, 10),
+    templateCreatePerHour: parsePositiveInteger(env.TEMPLATE_CREATE_RATE_LIMIT_PER_HOUR, 100),
     duplicateWindowMinutes: parsePositiveInteger(env.DUPLICATE_WINDOW_MINUTES, 10)
   };
 }
@@ -87,6 +87,47 @@ async function checkUsageLimit(supabase, { endpoint, apiKeyLabel, limit, windowM
   };
 }
 
+async function reserveTemplateCreateSlot(supabase, {
+  requestId,
+  apiKeyLabel,
+  limit,
+  templateName,
+  language,
+  imageUrlPresent,
+  variablesKeys
+}) {
+  const { data, error } = await supabase.rpc('reserve_template_create_slot', {
+    p_request_id: requestId,
+    p_api_key_label: apiKeyLabel,
+    p_limit: limit,
+    p_template_name: templateName,
+    p_language: language,
+    p_image_url_present: !!imageUrlPresent,
+    p_variables_keys: Array.isArray(variablesKeys) ? variablesKeys : []
+  });
+
+  if (error) {
+    const err = new Error('Failed to reserve template create capacity');
+    err.statusCode = 500;
+    err.upstream = error;
+    throw err;
+  }
+
+  const result = Array.isArray(data) ? data[0] : data;
+  if (!result || typeof result.allowed !== 'boolean') {
+    const err = new Error('Invalid template create reservation response');
+    err.statusCode = 500;
+    throw err;
+  }
+
+  return {
+    allowed: result.allowed,
+    currentCount: Number(result.current_count) || 0,
+    limit,
+    retryAfterSeconds: Math.max(1, Number(result.retry_after_seconds) || 3600)
+  };
+}
+
 async function findDuplicateSend(supabase, {
   apiKeyLabel,
   idempotencyKey,
@@ -157,6 +198,7 @@ module.exports = {
   hashValue,
   buildSendTemplateRequestHash,
   checkUsageLimit,
+  reserveTemplateCreateSlot,
   findDuplicateSend,
   logApiUsage
 };

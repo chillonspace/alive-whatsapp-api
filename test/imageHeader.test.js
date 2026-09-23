@@ -3,7 +3,10 @@ const test = require('node:test');
 
 const templatesRoute = require('../src/routes/templates');
 const sendTemplateRoute = require('../src/routes/sendTemplate');
-const { buildCreateTemplateRequest } = require('../src/services/chakraTemplateService');
+const {
+  buildCreateTemplateRequest,
+  validateTemplateConfiguration
+} = require('../src/services/chakraTemplateService');
 const { buildTemplatePayload } = require('../services/chakraService');
 
 const baseCreateBody = {
@@ -102,6 +105,28 @@ test('chakra create template request builds image header component', () => {
     }
   });
   assert.equal(request.components[1].type, 'BODY');
+});
+
+test('template configuration is validated before reserving upstream capacity', () => {
+  assert.throws(
+    () => validateTemplateConfiguration({}),
+    /CHAKRA_ACCESS_TOKEN, CHAKRA_WA_API_VERSION, or CHAKRA_TEST_WABA_ID/
+  );
+
+  assert.deepEqual(
+    validateTemplateConfiguration({
+      CHAKRA_API_BASE_URL: 'https://api.example.com/',
+      CHAKRA_ACCESS_TOKEN: 'token',
+      CHAKRA_WA_API_VERSION: 'v23.0',
+      CHAKRA_TEST_WABA_ID: 'waba-id'
+    }),
+    {
+      baseUrl: 'https://api.example.com',
+      accessToken: 'token',
+      apiVersion: 'v23.0',
+      wabaId: 'waba-id'
+    }
+  );
 });
 
 test('send-template requires image_url only for image header templates', () => {
