@@ -323,7 +323,7 @@ router.post('/send-template', requireApiKey, async (req, res) => {
   });
 
   try {
-    await sendWhatsAppMessage(phone, 'template', payload, runId);
+    const chakraResponse = await sendWhatsAppMessage(phone, 'template', payload, runId);
     await logApiUsage(supabase, {
       ...baseLogEntry,
       status: 'sent',
@@ -337,7 +337,9 @@ router.post('/send-template', requireApiKey, async (req, res) => {
       success: true,
       template_name: templateName,
       language,
-      phone
+      phone,
+      message_id: chakraResponse?._data?.externalId ?? null,
+      deliveryStatus: chakraResponse?._data?.deliveryStatus ?? null
     });
   } catch (err) {
     await logApiUsage(supabase, {

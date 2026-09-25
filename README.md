@@ -515,9 +515,24 @@ Example success response:
   "success": true,
   "template_name": "course_promo_image_v1",
   "language": "en",
-  "phone": "60123456789"
+  "phone": "<收件号码>",
+  "message_id": "wamid.EXAMPLE",
+  "deliveryStatus": "SENT"
 }
 ```
+
+调用链：**Alive 系统 → 中间层（本项目）→ Chakra → Meta**。
+
+成功 response 保留 HTTP 200 和原有字段，仅在最外层增加：
+
+| 字段 | 来源与含义 |
+| --- | --- |
+| `message_id` | Chakra 同步 response 的 `_data.externalId`，值保持不变；缺失或为 `null` 时返回 `null`，不使用其他 ID 替代。 |
+| `deliveryStatus` | Chakra 同步 response 的 `_data.deliveryStatus`，值保持原样；缺失或为 `null` 时返回 `null`，不默认填入 `SENT`。 |
+
+`deliveryStatus` 只是 Chakra 在本次发送 response 中返回的状态快照；`SENT` 不代表 `DELIVERED`，后续状态不会自动更新这次 response。中间层不向 Alive 系统返回完整 Chakra payload，也不增加 `upstream` 或 `provider`。失败 response 与 `/send-message` 对外 response 保持不变。
+
+2026-09-25 已通过模拟测试及使用生产配置的真实发送验证：成功 response 返回 `message_id`（`wamid`）与 `deliveryStatus: "SENT"`；已部署至正式环境。
 
 Duplicate-send response:
 

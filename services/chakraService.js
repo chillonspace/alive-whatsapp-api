@@ -210,7 +210,7 @@ async function sendWhatsAppMessage(phone, messageType, payload, runId = 'unknown
         buttonMappingCount: payload.button_mapping.length
       });
 
-      await sendTemplateMessage(phone, payload, pluginId, phoneNumberId, accessToken);
+      return await sendTemplateMessage(phone, payload, pluginId, phoneNumberId, accessToken);
     } else {
       const url = buildGenericMessageUrl(pluginId, apiVersion, phoneNumberId);
       const chakraPayload = buildGenericMessagePayload(phone, messageType, payload);
